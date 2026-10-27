@@ -82,6 +82,13 @@ class ParticleStore:
     (2, 2)
     """
 
+    def _allocate(self, capacity: int) -> None:
+        self._positions = xp.zeros((self._ndim, capacity), dtype=self._dtype)
+        self._velocities = xp.zeros((self._nvel, capacity), dtype=self._dtype)
+        self._weights = xp.ones(capacity, dtype=self._dtype)
+        self._alive = xp.zeros(capacity, dtype=bool)
+        self._ids = xp.zeros(capacity, dtype=xp.int64)
+
     def __init__(
         self,
         ndim: int,
@@ -104,13 +111,6 @@ class ParticleStore:
         self._length = 0
         self._allocator = IdAllocator() if id_allocator is None else id_allocator
         self._allocate(int(capacity))
-
-    def _allocate(self, capacity: int) -> None:
-        self._positions = xp.zeros((self._ndim, capacity), dtype=self._dtype)
-        self._velocities = xp.zeros((self._nvel, capacity), dtype=self._dtype)
-        self._weights = xp.ones(capacity, dtype=self._dtype)
-        self._alive = xp.zeros(capacity, dtype=bool)
-        self._ids = xp.zeros(capacity, dtype=xp.int64)
 
     # -- sizes and storage --------------------------------------------------
 
@@ -303,6 +303,14 @@ class ParticleStore:
             )
         self._alive[: self._length] &= ~mask
 
+    def _clear_rows(self, start: int, stop: int) -> None:
+        """Reset columns ``start:stop`` to the empty state."""
+        self._positions[:, start:stop] = 0.0
+        self._velocities[:, start:stop] = 0.0
+        self._weights[start:stop] = 1.0
+        self._alive[start:stop] = False
+        self._ids[start:stop] = 0
+
     def remove(self, index: int) -> None:
         """Remove the marker at ``index`` (alive or dead), shifting the rest down."""
         if not 0 <= index < self._length:
@@ -319,14 +327,6 @@ class ParticleStore:
         """Remove all markers; the id counter keeps running (ids are never reused)."""
         self._clear_rows(0, self._length)
         self._length = 0
-
-    def _clear_rows(self, start: int, stop: int) -> None:
-        """Reset columns ``start:stop`` to the empty state."""
-        self._positions[:, start:stop] = 0.0
-        self._velocities[:, start:stop] = 0.0
-        self._weights[start:stop] = 1.0
-        self._alive[start:stop] = False
-        self._ids[start:stop] = 0
 
     def _keep_first(self, count: int) -> None:
         """Keep the first ``count`` columns, all alive, and clear the rest."""
