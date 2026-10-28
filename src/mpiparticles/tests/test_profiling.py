@@ -40,3 +40,17 @@ def test_enable_tags_turns_the_regions_on():
         "mpiparticles.reserve",
         "user.step",
     }
+
+
+def test_the_opt_in_tag_has_an_entry_point():
+    """``scope-profiler tags`` finds the tag through the package's entry point."""
+    from importlib.metadata import entry_points
+
+    from mpiparticles._profiling import PROFILE_TAGS
+
+    found = {
+        entry_point.name: entry_point.value
+        for entry_point in entry_points(group="scope_profiler.opt_in_tags")
+    }
+    assert found.get("mpiparticles") == "mpiparticles"
+    assert "mpiparticles" in PROFILE_TAGS
