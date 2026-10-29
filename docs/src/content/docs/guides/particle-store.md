@@ -1,5 +1,5 @@
 ---
-title: The particle store
+title: Particle store
 description: Component-major marker storage with growth, compaction, sorting, checkpoints and a MarkerSet view.
 sidebar:
   order: 1
