@@ -1,6 +1,6 @@
-"""Which rank owns which marker.
+"""Marker owners.
 
-Split a box between four ranks with a BoxDecomposition and colour random markers by their
+Which rank owns which marker: split a box between four ranks with a BoxDecomposition and colour random markers by their
 owner. Four ranks are simulated by a stand-in communicator, so the script runs without MPI;
 under a real run each rank would only ask about its own markers.
 """
