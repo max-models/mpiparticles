@@ -30,6 +30,14 @@ from mpiparticles.collective import gather_columns, global_count
 from mpiparticles.decomposition import BoxDecomposition, Decomposition
 from mpiparticles.exchange import keep_owned, migrate
 from mpiparticles.ids import IdAllocator
+from mpiparticles.moments import (
+    BinAxis,
+    moment_indices,
+    moment_name,
+    moment_values,
+    phase_space_density,
+    velocity_moments,
+)
 from mpiparticles.store import MarkerView, ParticleStore, StoreSnapshot
 
 # The profiling regions are off unless the application enables the tag.
@@ -41,6 +49,7 @@ except PackageNotFoundError:  # not installed, e.g. run from a source tree
     __version__ = "0.0.0+unknown"
 
 __all__ = [
+    "BinAxis",
     "BoxDecomposition",
     "Decomposition",
     "IdAllocator",
@@ -51,4 +60,9 @@ __all__ = [
     "global_count",
     "keep_owned",
     "migrate",
+    "moment_indices",
+    "moment_name",
+    "moment_values",
+    "phase_space_density",
+    "velocity_moments",
 ]

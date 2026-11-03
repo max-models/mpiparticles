@@ -56,6 +56,11 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
 - **`migrate`** sends only the leavers, ids as int64 (exact above 2^53),
   and appends the arrivals. `keep_owned`, `global_count` and
   `gather_columns` are the companions.
+- **`velocity_moments`** sums the velocity moments of every order over
+  the markers of all ranks (`moment_indices` gives their order,
+  `moment_values` the per-marker products for a deposit on a grid), and
+  **`phase_space_density`** bins the markers on one to three phase-space
+  axes (`BinAxis`), summed over the ranks.
 
 Documentation: <https://max-models.github.io/mpiparticles/>
 

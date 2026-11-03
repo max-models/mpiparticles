@@ -7,6 +7,13 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `velocity_moments(velocities, weights, max_order=2, comm=None)`: the sums
+  `sum w v_i v_j ...` of every order up to `max_order` over the markers of all ranks;
+  `moment_indices` gives their order (each symmetric moment once), `moment_name` their letters
+  and `moment_values` the per-marker products, which a deposit turns into moments on a grid.
+- `phase_space_density(positions, velocities, weights, axes, comm=None)` and `BinAxis`: the
+  weights binned on one to three phase-space axes over the bin volume, summed over the ranks
+  (moved from picnic's `PhaseSpaceBinning`). A tutorial, "Moments and binning".
 - `ParticleStore`: per-rank marker storage in component-major arrays (positions, velocities,
   weights, alive, int64 ids) on NumPy or CuPy, with `reserve`, `add`, `deactivate`, `remove`,
   `clear`, `compact`, `compact_if_needed`, `sort_by_key`, `snapshot`/`restore` and a plasmacoll

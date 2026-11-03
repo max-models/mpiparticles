@@ -21,6 +21,8 @@ from mpiparticles import (
     gather_columns,
     global_count,
     migrate,
+    phase_space_density,
+    velocity_moments,
 )
 
 COMM = MPI.COMM_WORLD
@@ -149,6 +151,31 @@ def main() -> None:
     shared.add(xp.asarray(points), xp.zeros((3, 500)))
     mpiparticles.keep_owned(shared, deco)
     assert global_count(shared, COMM) == 500
+
+    # moments and phase-space densities: every rank gets the sums over all markers
+    weights_all = gather_columns(shared.active_weights(), COMM, root=None)
+    positions_all = gather_columns(shared.active_positions(), COMM, root=None)
+    rng = np.random.default_rng(RANK)
+    shared.set_active_velocities(xp.asarray(rng.normal(size=(3, shared.num_alive))))
+    sums = velocity_moments(
+        shared.active_velocities(), shared.active_weights(), 3, COMM
+    )
+    velocities = gather_columns(shared.active_velocities(), COMM, root=None)
+    expected = velocity_moments(velocities, weights_all, 3)
+    np.testing.assert_allclose(sums, expected, rtol=1e-12, atol=1e-12)
+    axes = {"x": (0.0, 1.0, 4), "vy": (-2.0, 2.0, 6)}
+    density = phase_space_density(
+        shared.active_positions(),
+        shared.active_velocities(),
+        shared.active_weights(),
+        axes,
+        COMM,
+    )
+    np.testing.assert_allclose(
+        density,
+        phase_space_density(positions_all, velocities, weights_all, axes),
+        rtol=1e-12,
+    )
 
     if RANK == 0:
         print(f"OK size={SIZE} big={big} sent={total_sent}")
