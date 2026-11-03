@@ -10,13 +10,13 @@ import pytest
 
 from mpiparticles import (
     BinAxis,
+    bin_axes,
     moment_indices,
     moment_name,
     moment_values,
     phase_space_density,
     velocity_moments,
 )
-from mpiparticles.moments import bin_axes
 from mpiparticles.tests.conftest import FakeComm, filled_store
 
 

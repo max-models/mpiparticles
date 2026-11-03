@@ -40,6 +40,7 @@ from mpiparticles._types import Array
 
 __all__ = [
     "BinAxis",
+    "bin_axes",
     "moment_indices",
     "moment_name",
     "moment_values",

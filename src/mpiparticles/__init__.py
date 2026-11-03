@@ -32,6 +32,7 @@ from mpiparticles.exchange import keep_owned, migrate
 from mpiparticles.ids import IdAllocator
 from mpiparticles.moments import (
     BinAxis,
+    bin_axes,
     moment_indices,
     moment_name,
     moment_values,
@@ -56,6 +57,7 @@ __all__ = [
     "MarkerView",
     "ParticleStore",
     "StoreSnapshot",
+    "bin_axes",
     "gather_columns",
     "global_count",
     "keep_owned",
