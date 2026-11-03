@@ -55,7 +55,7 @@ def test_the_empty_store_is_fine():
     assert keep_owned(store, deco) == 0
 
 
-@pytest.mark.parametrize("module", ["ids", "store", "decomposition"])
+@pytest.mark.parametrize("module", ["ids", "store", "decomposition", "moments"])
 def test_doctests(module):
     mod = __import__(f"mpiparticles.{module}", fromlist=["x"])
     assert doctest.testmod(mod, extraglobs={"xp": xp}).failed == 0
