@@ -7,6 +7,10 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `boris_push(store, e_field, b_field, dt, charge_over_mass)`: one Boris step of the stored
+  markers in electric and magnetic fields given at them, in 1D3V, 2D3V and 3D3V. A compiled
+  kernel, `mpiparticles.kernels.push_boris` (Pyccel on the CPU, with NumPy and CUDA versions),
+  the first of mpiparticles' kernels; `pyccel` is a dependency now. A tutorial, "Pushing markers".
 - `velocity_moments(velocities, weights, max_order=2, comm=None)`: the sums
   `sum w v_i v_j ...` of every order up to `max_order` over the markers of all ranks;
   `moment_indices` gives their order (each symmetric moment once), `moment_name` their letters
