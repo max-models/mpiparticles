@@ -61,6 +61,9 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
   `moment_values` the per-marker products for a deposit on a grid), and
   **`phase_space_density`** bins the markers on one to three phase-space
   axes (`BinAxis`), summed over the ranks.
+- **`boris_push`** advances the markers through electric and magnetic
+  fields given at them (the Boris scheme, compiled with Pyccel, CUDA for
+  CuPy arrays), in 1D3V, 2D3V and 3D3V.
 
 Documentation: <https://max-models.github.io/mpiparticles/>
 

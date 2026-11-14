@@ -26,6 +26,8 @@ dependencies = [
   "maybempi>=0.1.2",
   "mpiarray>=0.2.1",
   "numpy",
+  # the CPU kernels (the Boris push): compiled on first use
+  "pyccel>2.0",
   "scope-profiler>=0.7.5",
 ]
 optional-dependencies.dev = [
@@ -54,6 +56,7 @@ mpiparticles = "mpiparticles"
 
 [tool.setuptools]
 package-data."*" = [ "py.typed" ]
+package-data.mpiparticles = [ "kernels/*/*.cu" ]
 packages.find.where = [ "src" ]
 
 [tool.ruff]
@@ -66,11 +69,13 @@ lint.ignore = [ "E501" ]  # line length is handled by the formatter
 lint.per-file-ignores."**/tests/**" = [ "D" ]
 lint.per-file-ignores."*.ipynb" = [ "D" ]
 lint.per-file-ignores."docs/tools/*" = [ "D" ]
+# Pyccel's type annotations are strings it parses itself
+lint.per-file-ignores."src/mpiparticles/kernels/*/*_pyccel.py" = [ "F722", "F821", "UP" ]
 lint.pydocstyle.convention = "numpy"
 
 [tool.pyright]
 include = [ "src" ]
-exclude = [ "**/tests" ]
+exclude = [ "**/tests", "src/mpiparticles/kernels/*/*_pyccel.py" ]
 pythonVersion = "3.10"
 typeCheckingMode = "standard"
 
@@ -80,7 +85,8 @@ ini_options.testpaths = [ "src" ]
 ini_options.addopts = "-ra"
 
 [tool.coverage]
-run.omit = [ "*/tests/*" ]
+# the Pyccel kernels run compiled; the tests compare them with their NumPy versions
+run.omit = [ "*/tests/*", "*/kernels/*/*_pyccel.py" ]
 run.source = [ "mpiparticles" ]
 report.show_missing = true
 
