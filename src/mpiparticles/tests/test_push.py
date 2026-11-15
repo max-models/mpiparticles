@@ -213,3 +213,14 @@ def test_wrong_per_marker_arguments():
         boris_velocity(
             np.zeros((3, 4), dtype=np.float32), [0, 0, 0], [0, 0, 1], 0.1, 1.0
         )
+
+
+def test_column_arrays_with_transposed_strides():
+    # a (3, 1) transpose has strides (8, 24): NumPy calls it C-contiguous, Pyccel does not
+    field = np.array([[0.0, 0.0, 1.0]]).T
+    assert field.strides == (8, 24)
+    store = store_with(np.zeros((2, 1)), [[1.0], [0.0], [0.0]])
+    boris_push(store, field, field, 0.1, 1.0)
+    velocities = np.array([[1.0, 0.0, 0.0]]).T
+    boris_velocity(velocities, field, field, 0.1, np.array([1.0]))
+    np.testing.assert_allclose(velocities[:, 0], store.velocities[:, 0])

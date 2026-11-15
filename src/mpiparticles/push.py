@@ -33,6 +33,15 @@ from mpiparticles.kernels.push_boris import kernel as push_boris
 from mpiparticles.store import ParticleStore
 
 
+def _row_major(values: Array) -> bool:
+    """Whether a 2D array has the row-major strides the compiled kernels accept.
+
+    NumPy calls a ``(3, 1)`` transpose (strides ``(8, 24)``) C-contiguous, Pyccel does not.
+    """
+    rows, columns = values.strides
+    return rows >= columns * values.shape[1] and columns > 0
+
+
 def _at_markers(
     field: Array | np.ndarray, length: int, name: str, like: Array
 ) -> Array:
@@ -49,7 +58,10 @@ def _at_markers(
             f"{name} must be (3,) or (3, {length}) (one column per stored marker), "
             f"not {values.shape}"
         )
-    return module.ascontiguousarray(values)
+    values = module.ascontiguousarray(values)
+    if not _row_major(values):
+        values = module.array(values, order="C", copy=True)
+    return values
 
 
 def _per_marker(
@@ -131,7 +143,12 @@ def boris_velocity(
         length,
         velocities,
     )
-    boris_velocity_kernel(velocities, e, b, qm, step)
+    if _row_major(velocities):
+        boris_velocity_kernel(velocities, e, b, qm, step)
+        return
+    work = xp.get_array_module(velocities).array(velocities, order="C", copy=True)
+    boris_velocity_kernel(work, e, b, qm, step)
+    velocities[...] = work
 
 
 @sp.profile("mpiparticles.boris_push", tags=PROFILE_TAGS)
