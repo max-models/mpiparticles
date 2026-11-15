@@ -12,11 +12,6 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `boris_velocity(velocities, e_field, b_field, dt, charge_over_mass)` is its velocity update
   alone on a plain `(3, N)` array, for codes that move the positions themselves (a new kernel,
   `mpiparticles.kernels.boris_velocity`). The tutorial "Pushing markers" shows both.
-
-### Fixed
-
-- `boris_push` with a `(3, 1)` field taken as a transpose (strides `(8, 24)`): NumPy calls it
-  C-contiguous, the compiled kernel rejected it; such fields are copied first now.
 - `boris_push(store, e_field, b_field, dt, charge_over_mass)`: one Boris step of the stored
   markers in electric and magnetic fields given at them, in 1D3V, 2D3V and 3D3V. A compiled
   kernel, `mpiparticles.kernels.push_boris` (Pyccel on the CPU, with NumPy and CUDA versions),
