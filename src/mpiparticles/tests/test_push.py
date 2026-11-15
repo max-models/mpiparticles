@@ -1,9 +1,13 @@
-"""The Boris push: gyration, E×B drift, 1D3V to 3D3V, against the NumPy version."""
+"""The Boris push: gyration, E×B drift, 1D3V to 3D3V, per-marker steps, against NumPy."""
 
 import numpy as np
 import pytest
 
-from mpiparticles import ParticleStore, boris_push
+from mpiparticles import ParticleStore, boris_push, boris_velocity
+from mpiparticles.kernels.boris_velocity import kernel as velocity_kernel
+from mpiparticles.kernels.boris_velocity.boris_velocity_numpy import (
+    boris_velocity as boris_velocity_numpy,
+)
 from mpiparticles.kernels.push_boris import kernel
 from mpiparticles.kernels.push_boris.push_boris_numpy import (
     push_boris as push_boris_numpy,
@@ -13,7 +17,10 @@ from mpiparticles.kernels.push_boris.push_boris_numpy import (
 @pytest.fixture(autouse=True)
 def compiled():
     """The tests run the compiled Pyccel kernel, never the NumPy fallback."""
-    if not kernel.host_kernel.kernel.available("pyccel"):
+    if not (
+        kernel.host_kernel.kernel.available("pyccel")
+        and velocity_kernel.host_kernel.kernel.available("pyccel")
+    ):
         pytest.skip("Pyccel kernels unavailable")
 
 
@@ -134,3 +141,75 @@ def test_an_empty_store_and_wrong_arguments():
         boris_push(store, np.zeros((3, 5)), [0.0, 0.0, 1.0], 0.1, 1.0)
     with pytest.raises(ValueError, match="b_field"):
         boris_push(store, [0.0, 0.0, 0.0], [0.0, 1.0], 0.1, 1.0)
+
+
+def test_the_compiled_velocity_kernel_matches_the_numpy_version():
+    rng = np.random.default_rng(7)
+    n = 129
+    velocities = rng.normal(size=(3, n))
+    e_field, b_field = rng.normal(size=(3, n)), rng.normal(size=(3, n))
+    qm, dt = rng.normal(size=n), rng.uniform(0.01, 0.2, size=n)
+    expected = velocities.copy()
+    boris_velocity_numpy(expected, e_field, b_field, qm, dt)
+    boris_velocity(velocities, e_field, b_field, dt, qm)
+    np.testing.assert_allclose(velocities, expected, rtol=1e-12)
+
+
+def test_per_marker_values_are_the_same_as_one_push_per_marker():
+    # three markers, each with its own step and charge, against three separate pushes
+    rng = np.random.default_rng(3)
+    positions, velocities = rng.normal(size=(2, 3)), rng.normal(size=(3, 3))
+    e_field, b_field = rng.normal(size=(3, 3)), rng.normal(size=(3, 3))
+    dt, qm = np.array([0.1, 0.05, 0.2]), np.array([1.0, -3.0, 0.5])
+    store = store_with(positions, velocities)
+    store.reserve(10)  # the stored columns are a strided view of the arrays
+    boris_push(store, e_field, b_field, dt, qm)
+    for k in range(3):
+        single = store_with(positions[:, k : k + 1], velocities[:, k : k + 1])
+        boris_push(single, e_field[:, k], b_field[:, k], dt[k], qm[k])
+        np.testing.assert_allclose(store.velocities[:, k], single.velocities[:, 0])
+        np.testing.assert_allclose(store.positions[:, k], single.positions[:, 0])
+
+
+def test_a_scalar_and_a_per_marker_array_mix():
+    store = store_with(np.zeros((3, 2)), np.ones((3, 2)))
+    reference = store_with(np.zeros((3, 2)), np.ones((3, 2)))
+    boris_push(store, [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], np.full(2, 0.1), 2.0)
+    boris_push(reference, [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], 0.1, 2.0)
+    np.testing.assert_allclose(store.velocities[:, :2], reference.velocities[:, :2])
+    np.testing.assert_allclose(store.positions[:, :2], reference.positions[:, :2])
+
+
+def test_the_velocity_update_leaves_the_positions_and_steps_back():
+    # a negative step undoes a positive one (the Boris map is time reversible)
+    rng = np.random.default_rng(11)
+    start = rng.normal(size=(3, 5))
+    e_field, b_field = rng.normal(size=(3, 5)), rng.normal(size=(3, 5))
+    qm, dt = rng.normal(size=5), np.full(5, 0.1)
+    velocities = start.copy()
+    boris_velocity(velocities, e_field, b_field, dt, qm)
+    assert not np.allclose(velocities, start)
+    boris_velocity(velocities, e_field, b_field, -dt, qm)
+    np.testing.assert_allclose(velocities, start, rtol=1e-12, atol=1e-14)
+
+
+def test_the_velocity_update_on_a_strided_view_and_no_markers():
+    big = np.ones((3, 8))
+    view = big[:, ::2]
+    boris_velocity(view, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 1.0, 1.0)
+    np.testing.assert_allclose(big, 1.0)
+    boris_velocity(np.zeros((3, 0)), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.1, 1.0)
+
+
+def test_wrong_per_marker_arguments():
+    store = store_with(np.zeros((2, 2)), np.zeros((3, 2)))
+    with pytest.raises(ValueError, match=r"dt must be a number or \(2,\)"):
+        boris_push(store, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], np.ones(3), 1.0)
+    with pytest.raises(ValueError, match="charge_over_mass"):
+        boris_push(store, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.1, np.ones((2, 1)))
+    with pytest.raises(ValueError, match=r"\(3, N\) array"):
+        boris_velocity(np.zeros((2, 4)), [0, 0, 0], [0, 0, 1], 0.1, 1.0)
+    with pytest.raises(ValueError, match="float64"):
+        boris_velocity(
+            np.zeros((3, 4), dtype=np.float32), [0, 0, 0], [0, 0, 1], 0.1, 1.0
+        )
