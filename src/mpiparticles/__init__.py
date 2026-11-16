@@ -40,7 +40,7 @@ from mpiparticles.moments import (
     phase_space_density,
     velocity_moments,
 )
-from mpiparticles.push import boris_push
+from mpiparticles.push import boris_push, boris_velocity
 from mpiparticles.store import MarkerView, ParticleStore, StoreSnapshot
 
 # The profiling regions are off unless the application enables the tag.
@@ -61,6 +61,7 @@ __all__ = [
     "StoreSnapshot",
     "bin_axes",
     "boris_push",
+    "boris_velocity",
     "gather_columns",
     "global_count",
     "keep_owned",
