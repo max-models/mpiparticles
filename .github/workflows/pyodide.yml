@@ -1,0 +1,20 @@
+name: Pyodide
+
+# The package in the browser: its wheel installed with micropip in Pyodide under Node, every
+# module imported and the live demo of the docs (docs/src/components/*_demo.py) run with its
+# defaults, with the shared workflow of max-models/starlight-theme. Every module imports there
+# (the kernels fall back to their NumPy versions), so nothing is skipped.
+
+on:
+  push:
+    branches: ["main", "devel"]
+  pull_request:
+    branches: ["main", "devel"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyodide:
+    uses: max-models/starlight-theme/.github/workflows/pyodide.yml@v0
