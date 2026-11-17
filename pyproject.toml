@@ -59,7 +59,7 @@ mpiparticles = "mpiparticles"
 
 [tool.setuptools]
 package-data."*" = [ "py.typed" ]
-package-data.mpiparticles = [ "kernels/*/*.cu" ]
+package-data.mpiparticles = [ "kernels/*.cuh", "kernels/*/*.cu" ]
 packages.find.where = [ "src" ]
 
 [tool.ruff]

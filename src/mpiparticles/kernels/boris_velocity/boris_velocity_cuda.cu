@@ -5,6 +5,7 @@
 // markers at the middle of the step; charge_over_mass and dt (N,), one per marker.
 
 #include "cunumpy/array_view.cuh"
+#include "mpiparticles/kernels/boris.cuh"
 
 extern "C" __global__
 void boris_velocity(
@@ -17,21 +18,13 @@ void boris_velocity(
     const long long marker = blockDim.x * (long long)blockIdx.x + threadIdx.x;
     if (marker >= velocities.shape[1]) return;
     const double half = 0.5 * charge_over_mass(marker) * dt(marker);
-    double vx = velocities(0, marker) + half * e_field(0, marker);
-    double vy = velocities(1, marker) + half * e_field(1, marker);
-    double vz = velocities(2, marker) + half * e_field(2, marker);
-    const double tx = half * b_field(0, marker);
-    const double ty = half * b_field(1, marker);
-    const double tz = half * b_field(2, marker);
-    const double factor = 2.0 / (1.0 + tx * tx + ty * ty + tz * tz);
-    const double sx = factor * tx, sy = factor * ty, sz = factor * tz;
-    const double px = vx + vy * tz - vz * ty;
-    const double py = vy + vz * tx - vx * tz;
-    const double pz = vz + vx * ty - vy * tx;
-    vx += py * sz - pz * sy;
-    vy += pz * sx - px * sz;
-    vz += px * sy - py * sx;
-    velocities(0, marker) = vx + half * e_field(0, marker);
-    velocities(1, marker) = vy + half * e_field(1, marker);
-    velocities(2, marker) = vz + half * e_field(2, marker);
+    double vx = velocities(0, marker), vy = velocities(1, marker), vz = velocities(2, marker);
+    mpiparticles_boris(vx, vy, vz,
+                       half * e_field(0, marker), half * e_field(1, marker),
+                       half * e_field(2, marker),
+                       half * b_field(0, marker), half * b_field(1, marker),
+                       half * b_field(2, marker));
+    velocities(0, marker) = vx;
+    velocities(1, marker) = vy;
+    velocities(2, marker) = vz;
 }

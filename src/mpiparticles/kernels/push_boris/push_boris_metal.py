@@ -13,36 +13,24 @@ import numpy as np
 
 from mpiparticles._types import Array
 from mpiparticles.kernels import KERNEL_PACKAGE
+from mpiparticles.kernels.boris import BORIS_METAL_HEADER
 
 _SOURCE = """
     uint k = thread_position_in_grid.x;
     uint n = velocities_shape[1];
     if (k >= n) return;
-    float half = params[0], dt = params[1];
+    float step = params[0], dt = params[1];
     int ndim = (int)params[2];
-    float vx = velocities[k] + half * e_field[k];
-    float vy = velocities[n + k] + half * e_field[n + k];
-    float vz = velocities[2 * n + k] + half * e_field[2 * n + k];
-    float tx = half * b_field[k];
-    float ty = half * b_field[n + k];
-    float tz = half * b_field[2 * n + k];
-    float factor = 2.0f / (1.0f + tx * tx + ty * ty + tz * tz);
-    float sx = factor * tx, sy = factor * ty, sz = factor * tz;
-    float px = vx + vy * tz - vz * ty;
-    float py = vy + vz * tx - vx * tz;
-    float pz = vz + vx * ty - vy * tx;
-    vx += py * sz - pz * sy;
-    vy += pz * sx - px * sz;
-    vz += px * sy - py * sx;
-    vx += half * e_field[k];
-    vy += half * e_field[n + k];
-    vz += half * e_field[2 * n + k];
-    new_velocities[k] = vx;
-    new_velocities[n + k] = vy;
-    new_velocities[2 * n + k] = vz;
-    displacement[k] = vx * dt;
-    if (ndim > 1) displacement[n + k] = vy * dt;
-    if (ndim > 2) displacement[2 * n + k] = vz * dt;
+    float3 v = float3(velocities[k], velocities[n + k], velocities[2 * n + k]);
+    float3 e = float3(e_field[k], e_field[n + k], e_field[2 * n + k]);
+    float3 b = float3(b_field[k], b_field[n + k], b_field[2 * n + k]);
+    v = mpiparticles_boris(v, step * e, step * b);
+    new_velocities[k] = v.x;
+    new_velocities[n + k] = v.y;
+    new_velocities[2 * n + k] = v.z;
+    displacement[k] = v.x * dt;
+    if (ndim > 1) displacement[n + k] = v.y * dt;
+    if (ndim > 2) displacement[2 * n + k] = v.z * dt;
 """
 
 _KERNEL = KERNEL_PACKAGE.metal_kernel(
@@ -50,6 +38,7 @@ _KERNEL = KERNEL_PACKAGE.metal_kernel(
     _SOURCE,
     inputs=["velocities", "e_field", "b_field", "params"],
     outputs=["new_velocities", "displacement"],
+    header=BORIS_METAL_HEADER,
 )
 
 
