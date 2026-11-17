@@ -6,6 +6,11 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- `mpiparticles/kernels/boris_pyccel.py`: the Boris update for Pyccel kernels, `@inline`
+  `boris_update(vx, vy, vz, kx, ky, kz, tx, ty, tz)`, with the arithmetic of `boris.cuh`. A
+  Pyccel kernel of any package imports it and cunumpy's kernel cache builds it with the kernel
+  (needs cunumpy with dependency builds); Pyccel inlines it. It has no local variables, so it is
+  safe inside `#$ omp parallel for` loops. `push_boris` and `boris_velocity` use it.
 
 - The Boris velocity update as shared building blocks for fused pushes:
   `mpiparticles/kernels/boris.cuh` (the CUDA device function `mpiparticles_boris`, for
