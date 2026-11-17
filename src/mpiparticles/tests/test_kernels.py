@@ -162,3 +162,15 @@ def test_the_metal_push_kernel_agrees_and_keeps_float64_positions(ndim):
     _close(result[1], expected[1])
     # the displacement is float32, the positions (near 1000) stay float64
     np.testing.assert_allclose(result[0], expected[0], rtol=0.0, atol=1e-5)
+
+
+def test_the_pyccel_boris_update_is_the_numpy_one():
+    # the inlined helper of the Pyccel kernels (run in Python) against boris_update
+    from mpiparticles.kernels.boris import boris_update as numpy_update
+    from mpiparticles.kernels.boris_pyccel import boris_update
+
+    rng = np.random.default_rng(6)
+    v, kick, t = rng.normal(size=(3, 3, 40))
+    expected = numpy_update(v, kick, t)
+    got = np.array([boris_update(*v[:, k], *kick[:, k], *t[:, k]) for k in range(40)]).T
+    np.testing.assert_allclose(got, expected, rtol=1e-14, atol=1e-14)
