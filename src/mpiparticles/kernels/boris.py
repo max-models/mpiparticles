@@ -29,7 +29,7 @@ inline float3 mpiparticles_boris(float3 v, float3 kick, float3 t) {
 
 
 def _cross(a: Array, b: Array, module) -> Array:
-    """The cross product of ``(3, N)`` columns, component by component."""
+    """Return the cross products of ``(3, N)`` columns, component by component."""
     return module.stack(
         (
             a[1] * b[2] - a[2] * b[1],
