@@ -26,8 +26,10 @@ jobs:
     with:
       node-version: "24"
       pre-build: uv run python docs/tools/examples.py
+      pyodide: true
       smoke-paths: |
         getting-started/installation/index.html
+        getting-started/live-demo/index.html
         tutorials/index.html
         tutorials/moving-markers/index.html
         full-examples/index.html

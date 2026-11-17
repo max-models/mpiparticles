@@ -1,0 +1,36 @@
+---
+title: Live demo
+description: Push two species through crossed electric and magnetic fields with the Boris push, in the browser.
+---
+
+import PyodideDemo from '@max-models/starlight-theme/components/PyodideDemo.astro';
+import code from '../../../components/mpiparticles_demo.py?raw';
+
+This demo runs mpiparticles in your browser with [Pyodide](https://pyodide.org), on the NumPy
+versions of its kernels (there is no compiler in the browser). Move the sliders to push the
+markers again:
+
+<PyodideDemo
+	code={code}
+	controls={[
+		{ name: 'e_field', label: 'E<sub>y</sub>', min: 0, max: 2, step: 0.05, value: 0.5 },
+		{ name: 'b_field', label: 'B<sub>z</sub>', min: 0.5, max: 4, step: 0.1, value: 1 },
+		{ name: 'dt', label: 'Time step', min: 0.02, max: 1, step: 0.02, value: 0.1 },
+		{ name: 'steps', label: 'Steps', min: 10, max: 600, step: 10, value: 150 },
+	]}
+	captions={[
+		'Three trajectories of each species, and where all 200 markers end.',
+		'The mean guiding-centre shift of each species along x, against the E×B drift (E/B) t.',
+	]}
+/>
+
+A `ParticleStore` holds 100 markers of each species, with charge over mass +1 and −4 (in
+normalized units) and thermal velocities, in an electric field along y and a magnetic field
+along z. `boris_push` moves them, with one charge over mass per marker; `boris_velocity`
+first steps their velocities half a step back to start the leapfrog.
+
+The two species gyrate in opposite directions and on different radii, but drift together
+along x at E/B: the numbers below the figures compare the measured drift speeds with it. The
+Boris scheme gives this drift exactly even when the gyration is under-resolved: raise the time
+step until ω<sub>c</sub>Δt of the lighter species is well above 1: its steps jump across the
+gyration, but its drift stays at E/B.

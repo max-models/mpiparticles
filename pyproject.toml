@@ -26,8 +26,9 @@ dependencies = [
   "maybempi>=0.1.2",
   "mpiarray>=0.2.1",
   "numpy",
-  # the CPU kernels (the Boris push): compiled on first use
-  "pyccel>2.0",
+  # the CPU kernels (the Boris push): compiled on first use; not in the browser (Pyodide),
+  # which has no compiler and no wheel of Pyccel: the kernels run their NumPy versions there
+  "pyccel>2.0; sys_platform!='emscripten'",
   "scope-profiler>=0.7.5",
 ]
 optional-dependencies.dev = [

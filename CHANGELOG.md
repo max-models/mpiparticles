@@ -7,6 +7,11 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- A live demo in the docs ("Live demo" under Getting started): two species drifting in
+  crossed electric and magnetic fields, pushed with `boris_push` in the reader's browser
+  (Pyodide, on the NumPy kernels), and a Pyodide workflow that imports the package and runs the
+  demo there. `pyccel` is no longer a dependency in the browser (`sys_platform != "emscripten"`),
+  where it cannot be installed; the kernels run their NumPy versions there.
 - `boris_push` takes `dt` and `charge_over_mass` as one number or one value per stored marker
   (several species in one store, a charge state per marker, a step per marker), and
   `boris_velocity(velocities, e_field, b_field, dt, charge_over_mass)` is its velocity update
