@@ -7,6 +7,10 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Metal versions (Apple-silicon GPU, float32) of the `push_boris` and `boris_velocity`
+  kernels, and `mpiparticles.kernels.catalog` (`KERNELS`, `metal_kernel(name)`) as in the other
+  packages; the `metal` extra installs MLX. Tests of the CUDA versions on cunumpy's emulator,
+  and of `boris_push` and `boris_velocity` on CuPy arrays (cunumpy's fake CuPy).
 - A live demo in the docs ("Live demo" under Getting started): two species drifting in
   crossed electric and magnetic fields, pushed with `boris_push` in the reader's browser
   (Pyodide, on the NumPy kernels), and a Pyodide workflow that imports the package and runs the
