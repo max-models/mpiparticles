@@ -46,6 +46,8 @@ optional-dependencies.docs = [
   "nbclient>=0.11",
   "nbformat>=5.11.1",
 ]
+# the Metal versions of the kernels (Apple-silicon GPU), see mpiparticles.kernels.catalog
+optional-dependencies.metal = [ "mlx; sys_platform == 'darwin' and platform_machine == 'arm64'" ]
 # without mpi4py, mpiparticles runs serially on maybempi's stand-in for mpi4py.MPI;
 # the tests that launch mpiexec need it
 optional-dependencies.mpi = [ "mpi4py" ]
@@ -57,7 +59,7 @@ mpiparticles = "mpiparticles"
 
 [tool.setuptools]
 package-data."*" = [ "py.typed" ]
-package-data.mpiparticles = [ "kernels/*/*.cu" ]
+package-data.mpiparticles = [ "kernels/*.cuh", "kernels/*/*.cu" ]
 packages.find.where = [ "src" ]
 
 [tool.ruff]
@@ -86,8 +88,9 @@ ini_options.testpaths = [ "src" ]
 ini_options.addopts = "-ra"
 
 [tool.coverage]
-# the Pyccel kernels run compiled; the tests compare them with their NumPy versions
-run.omit = [ "*/tests/*", "*/kernels/*/*_pyccel.py" ]
+# the Pyccel kernels run compiled (the tests compare them with their NumPy versions); the
+# Metal versions run only on an Apple-silicon GPU
+run.omit = [ "*/kernels/*/*_metal.py", "*/kernels/*/*_pyccel.py", "*/tests/*" ]
 run.source = [ "mpiparticles" ]
 report.show_missing = true
 
