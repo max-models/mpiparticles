@@ -174,3 +174,81 @@ def test_the_pyccel_boris_update_is_the_numpy_one():
     expected = numpy_update(v, kick, t)
     got = np.array([boris_update(*v[:, k], *kick[:, k], *t[:, k]) for k in range(40)]).T
     np.testing.assert_allclose(got, expected, rtol=1e-14, atol=1e-14)
+
+
+def _pyccel_boris(v, kick, t):
+    """The Pyccel block ``boris_update``, the source of truth, run in Python per marker."""
+    from mpiparticles.kernels.boris_pyccel import boris_update
+
+    columns = [boris_update(*v[:, i], *kick[:, i], *t[:, i]) for i in range(v.shape[1])]
+    return np.array(columns, dtype=v.dtype).T
+
+
+@EMULATOR
+def test_boris_cuh_is_the_pyccel_block():
+    # the hand-written CUDA version computes what the Pyccel block computes
+    import cunumpy as xp
+
+    source = """
+#include "cunumpy/array_view.cuh"
+#include "mpiparticles/kernels/boris.cuh"
+extern "C" __global__ void run(Array2D<double> v, Array2D<double> k, Array2D<double> t,
+                               Array2D<double> out) {
+    const long long i = blockDim.x * (long long)blockIdx.x + threadIdx.x;
+    if (i >= v.shape[1]) return;
+    double a = v(0, i), b = v(1, i), c = v(2, i);
+    mpiparticles_boris(a, b, c, k(0, i), k(1, i), k(2, i), t(0, i), t(1, i), t(2, i));
+    out(0, i) = a;
+    out(1, i) = b;
+    out(2, i) = c;
+}"""
+    rng = np.random.default_rng(8)
+    v, k, t = (rng.normal(size=(3, N)) for _ in range(3))
+    roots = [str(p) for p in xp.kernels.source_roots("mpiparticles", "cunumpy")]
+    out = np.zeros((3, N))
+    emulate_cuda_kernel(
+        xp.kernels.CudaKernel(source, "run", include_dirs=roots),
+        v,
+        k,
+        t,
+        out,
+        n_threads=N,
+    )
+    np.testing.assert_allclose(out, _pyccel_boris(v, k, t), rtol=1e-14, atol=1e-14)
+
+
+def test_the_numpy_boris_update_is_the_pyccel_block():
+    from mpiparticles.kernels.boris import boris_update
+
+    rng = np.random.default_rng(9)
+    v, k, t = (rng.normal(size=(3, N)) for _ in range(3))
+    np.testing.assert_allclose(
+        boris_update(v, k, t), _pyccel_boris(v, k, t), rtol=1e-14, atol=1e-14
+    )
+
+
+@METAL
+def test_the_metal_boris_header_is_the_pyccel_block():
+    import cunumpy as xp
+
+    from mpiparticles.kernels.boris import BORIS_METAL_HEADER
+
+    source = """
+    uint i = thread_position_in_grid.x;
+    uint n = v_shape[1];
+    if (i >= n) return;
+    float3 r = mpiparticles_boris(float3(v[i], v[n + i], v[2 * n + i]),
+                                  float3(k[i], k[n + i], k[2 * n + i]),
+                                  float3(t[i], t[n + i], t[2 * n + i]));
+    out[i] = r.x;
+    out[n + i] = r.y;
+    out[2 * n + i] = r.z;
+"""
+    kernel = xp.kernels.MetalKernel(
+        source, ["v", "k", "t"], ["out"], name="boris_header", header=BORIS_METAL_HEADER
+    )
+    rng = np.random.default_rng(10)
+    v, k, t = (rng.normal(size=(3, N)).astype(np.float32) for _ in range(3))
+    out = np.zeros((3, N), np.float32)
+    kernel(v, k, t, out=(out,), n_threads=N)
+    _close(out, _pyccel_boris(v.astype(float), k.astype(float), t.astype(float)))

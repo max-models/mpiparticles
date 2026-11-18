@@ -6,6 +6,9 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Tests that the hand-written CUDA (`boris.cuh`, on cunumpy's emulator), NumPy and Metal Boris
+  updates compute what the Pyccel block `boris_pyccel.boris_update` computes, run in Python:
+  the Pyccel block is the source of truth of the four versions.
 - `mpiparticles/kernels/boris_pyccel.py`: the Boris update for Pyccel kernels, `@inline`
   `boris_update(vx, vy, vz, kx, ky, kz, tx, ty, tz)`, with the arithmetic of `boris.cuh`. A
   Pyccel kernel of any package imports it and cunumpy's kernel cache builds it with the kernel
