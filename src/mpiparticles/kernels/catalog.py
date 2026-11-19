@@ -19,7 +19,12 @@ from cunumpy.kernels import metal_available
 __all__ = ["KERNELS", "KERNEL_NAMES", "METAL_KERNEL_NAMES", "metal_kernel"]
 
 #: The kernels, by name.
-KERNEL_NAMES = ("boris_velocity", "push_boris")
+KERNEL_NAMES = (
+    "boris_velocity",
+    "push_boris",
+    "guiding_centre_rates",
+    "guiding_centre_velocity",
+)
 
 _PACKAGE = __name__.rpartition(".")[0]
 

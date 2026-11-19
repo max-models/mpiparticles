@@ -66,6 +66,11 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
   CuPy arrays), in 1D3V, 2D3V and 3D3V, with a charge and a time step
   for all markers or per marker; **`boris_velocity`** is its velocity
   update alone, on plain arrays.
+- **`guiding_centre_push`** moves strongly magnetized markers as guiding
+  centres (E×B, grad-B and curvature drifts, parallel motion and mirror
+  force, the magnetic moment kept; a kick-drift step, no gyration to
+  resolve), through fields given as a function of the positions;
+  **`guiding_centre_step`** is the same on plain arrays.
 
 Documentation: <https://max-models.github.io/mpiparticles/>
 
