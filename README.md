@@ -68,7 +68,7 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
   update alone, on plain arrays.
 - **`guiding_centre_push`** moves strongly magnetized markers as guiding
   centres (E×B, grad-B and curvature drifts, parallel motion and mirror
-  force, the magnetic moment kept; midpoint rule, no gyration to
+  force, the magnetic moment kept; a kick-drift step, no gyration to
   resolve), through fields given as a function of the positions;
   **`guiding_centre_step`** is the same on plain arrays.
 

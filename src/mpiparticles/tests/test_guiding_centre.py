@@ -250,18 +250,44 @@ def _bounce(dt, steps):
 
 
 def test_a_mirror_reflects_where_mu_b_is_the_energy_and_keeps_mu():
-    positions, energies, mu = _bounce(0.01, 1000)
+    positions, energies, mu = _bounce(0.01, 2000)
     # energy 1 = mu B(x) with mu = 0.5: B = 2, x_turn = 1
     assert positions.max() == pytest.approx(1.0, rel=1e-4)
     assert positions.min() == pytest.approx(-1.0, rel=1e-4)
     assert mu == pytest.approx(0.5, rel=1e-12)
-    np.testing.assert_allclose(energies, 1.0, rtol=1e-4)
+    np.testing.assert_allclose(energies, 1.0, rtol=3e-3)
 
 
-def test_the_step_is_second_order():
-    errors = [np.abs(_bounce(dt, int(2.0 / dt))[1] - 1.0).max() for dt in (0.02, 0.01)]
-    # second order at least (the energy error of this symmetric bounce falls as dt^3)
-    assert errors[0] / errors[1] > 3.5
+def test_the_bounce_keeps_its_energy_bounded():
+    """Kick-drift: the energy error of the stored velocity is O(dt) and does not grow."""
+    errors = []
+    for dt in (0.02, 0.01):
+        energies = _bounce(dt, int(40.0 / dt))[1]  # about ten bounces
+        error = np.abs(energies - 1.0)
+        half = error.size // 2
+        assert error[half:].max() < 1.01 * error[:half].max()
+        errors.append(error.max())
+    assert errors[0] / errors[1] == pytest.approx(2.0, rel=0.05)
+
+
+def test_a_plasma_oscillation_along_b_is_neither_damped_nor_amplified():
+    """Kick-drift couples to a field of the start of the step without growth: det = 1."""
+    omega, dt = 1.0, 0.3
+
+    def oscillator(points):  # E_x = -x (q = m = 1): an oscillation at omega along B_x
+        n = points.shape[1]
+        e = np.zeros((3, n))
+        e[0] = -(omega**2) * points[0]
+        b = np.tile([[1.0], [0.0], [0.0]], n)
+        return e, b, np.zeros((3, n)), np.zeros((3, n))
+
+    x, v = np.array([[1.0]]), np.zeros((3, 1))
+    amplitude = []
+    for _ in range(2000):
+        mp.guiding_centre_step(x, v, oscillator, dt, 1.0, 1.0)
+        # the invariant of the symplectic Euler map: x^2 + v^2 - dt x v
+        amplitude.append(x[0, 0] ** 2 + v[0, 0] ** 2 - dt * x[0, 0] * v[0, 0])
+    np.testing.assert_allclose(amplitude, 1.0, rtol=1e-12)
 
 
 def test_a_store_needs_three_velocity_components():

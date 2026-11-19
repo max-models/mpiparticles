@@ -7,9 +7,11 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Guiding centres (drift-kinetic markers): `guiding_centre_push` (a `ParticleStore`) and
-  `guiding_centre_step` (plain arrays) move the guiding centre and the parallel velocity by the
-  midpoint rule (E×B, grad-B and curvature drifts, parallel electric and mirror forces, the
-  magnetic moment kept) and store the velocity rebuilt in the new field, the gyrophase carried
+  `guiding_centre_step` (plain arrays) move the guiding centre and the parallel velocity by a
+  kick and a drift (E×B, grad-B and curvature drifts, parallel electric and mirror forces, the
+  magnetic moment kept): the kick of `v_par` at the start, then the midpoint rule for the
+  drift. Along the field this is the symplectic kick-drift of a particle push (bounded energy,
+  no spurious damping when coupled to a field solve) and store the velocity rebuilt in the new field, the gyrophase carried
   along; the fields come as a function of the positions (E, B, grad |B|, curvature).
   `magnetic_moment` gives `mu`. The per-marker arithmetic is two blocks in every backend, for
   fused pushes of other codes too: `mpiparticles/kernels/guiding_centre.cuh` (CUDA),
@@ -17,9 +19,8 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `guiding_centre_pyccel.py` (`@inline` `gc_rates`, `gc_velocity`, written by
   `_generate_guiding_centre_pyccel.py`), with the kernels `guiding_centre_rates` and
   `guiding_centre_velocity`. Tests of every backend against the Pyccel blocks, the drifts
-  against their formulas, a mirror bounce and the order of the step; a tutorial section. The
-  step is free of `omega_c` but not of the bounce: the midpoint rule amplifies an oscillation
-  by `sqrt(1 + (omega dt)^4 / 4)` per step.
+  against their formulas, a mirror bounce with bounded energy, the invariant of the kick-drift
+  map; a tutorial section.
 - Tests that the hand-written CUDA (`boris.cuh`, on cunumpy's emulator), NumPy and Metal Boris
   updates compute what the Pyccel block `boris_pyccel.boris_update` computes, run in Python:
   the Pyccel block is the source of truth of the four versions.

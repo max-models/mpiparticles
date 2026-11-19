@@ -8,9 +8,14 @@ moves the guiding centre ``X`` and ``v_par`` by
     dX/dt     = v_par b + E x B / B^2 + (mu / (q B)) b x grad B + (m v_par^2 / (q B)) b x kappa,
     dv_par/dt = (q / m) E . b - (mu / m) b . grad B,
 
-with ``kappa = (b . grad) b``, by the midpoint rule (second order; the fields are evaluated
-at the start and at the midpoint), then stores ``v_par b + v_perp e_perp`` in the new field
-with ``v_perp = sqrt(2 mu B / m)`` (the gyrophase carried along). Without the gyration
+with ``kappa = (b . grad) b``, by a kick and a drift: ``v_par`` is kicked by the parallel and
+mirror forces at the start, then ``X`` moves by the midpoint rule with the new ``v_par`` (the
+fields at the start and at the midpoint). Along a uniform field this is the symplectic
+kick-drift of a particle push: a bounce or a plasma oscillation along B keeps its energy
+bounded, with no spurious growth or damping, and it is coupled to a field solve like the Boris
+push (the field of the start of the step). Across the field the drifts have the midpoint
+rule's second order in a given field. The step then stores ``v_par b + v_perp e_perp`` in the
+new field with ``v_perp = sqrt(2 mu B / m)`` (the gyrophase carried along). Without the gyration
 there is no ``omega_c dt`` limit; the polarization drift and finite-Larmor-radius effects
 are left out.
 
@@ -96,7 +101,7 @@ def guiding_centre_step(
     charge: float,
     mass: float,
 ) -> None:
-    """Advance guiding centres by one midpoint step, in place.
+    """Advance guiding centres by one kick-drift step, in place (see the module).
 
     Parameters
     ----------
@@ -137,21 +142,15 @@ def guiding_centre_step(
     magnitude = module.sqrt(module.sum(b_old * b_old, axis=0))
     v_par = module.sum(velocities * b_old, axis=0) / magnitude
     mu = magnetic_moment(velocities, b_old, mass)
-    drift, accel, _ = _rates(
-        lambda _: (e, b_old, grad_b, curvature),
-        positions,
-        v_par,
-        mu,
-        charge,
-        mass,
-        module,
-    )
-    midpoint = positions + 0.5 * dt * drift[:ndim]
-    drift, accel, _ = _rates(
-        fields, midpoint, v_par + 0.5 * dt * accel, mu, charge, mass, module
-    )
-    positions += dt * drift[:ndim]
+    here = (e, b_old, grad_b, curvature)
+    # the kick: v_par by the parallel and mirror forces at the start
+    _, accel, _ = _rates(lambda _: here, positions, v_par, mu, charge, mass, module)
     v_par = v_par + dt * accel
+    # the drift: the midpoint rule for X with the new v_par, in the given field
+    drift, _, _ = _rates(lambda _: here, positions, v_par, mu, charge, mass, module)
+    midpoint = positions + 0.5 * dt * drift[:ndim]
+    drift, _, _ = _rates(fields, midpoint, v_par, mu, charge, mass, module)
+    positions += dt * drift[:ndim]
     b_new = _c_order(module.asarray(fields(positions)[1]), module)
     stored = _c_order(velocities, module)
     velocity_kernel(stored, b_old, b_new, _c_order(v_par, module), mu, float(mass))
