@@ -4,7 +4,8 @@ A :class:`ParticleStore` holds the markers of one rank in component-major
 arrays (CPU or GPU through ``cunumpy``) with stable int64 ids; a
 :class:`Decomposition` says which rank owns which position; :func:`migrate`
 moves the markers that left a rank's subdomain to their owners; :func:`boris_push`
-advances them through given electric and magnetic fields (1D3V, 2D3V and 3D3V). Without an MPI
+advances them through given electric and magnetic fields (1D3V, 2D3V and 3D3V), and
+:func:`guiding_centre_push` moves them as guiding centres. Without an MPI
 launcher everything runs serially, with no MPI calls.
 
 The expensive operations are scope-profiler regions named ``mpiparticles.<operation>``,
@@ -30,6 +31,11 @@ from mpiparticles._profiling import PROFILE_TAGS
 from mpiparticles.collective import gather_columns, global_count
 from mpiparticles.decomposition import BoxDecomposition, Decomposition
 from mpiparticles.exchange import keep_owned, migrate
+from mpiparticles.guiding_centre import (
+    guiding_centre_push,
+    guiding_centre_step,
+    magnetic_moment,
+)
 from mpiparticles.ids import IdAllocator
 from mpiparticles.moments import (
     BinAxis,
@@ -64,7 +70,10 @@ __all__ = [
     "boris_velocity",
     "gather_columns",
     "global_count",
+    "guiding_centre_push",
+    "guiding_centre_step",
     "keep_owned",
+    "magnetic_moment",
     "migrate",
     "moment_indices",
     "moment_name",
