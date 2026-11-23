@@ -22,6 +22,8 @@ __all__ = ["KERNELS", "KERNEL_NAMES", "METAL_KERNEL_NAMES", "metal_kernel"]
 KERNEL_NAMES = (
     "boris_velocity",
     "push_boris",
+    "relativistic_boris_velocity",
+    "push_relativistic_boris",
     "guiding_centre_rates",
     "guiding_centre_velocity",
 )

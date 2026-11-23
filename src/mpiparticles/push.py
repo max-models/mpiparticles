@@ -18,6 +18,15 @@ pure magnetic field exactly and gives the E×B drift without error; with
 ``omega_c dt`` large the gyration phase lags, the orbit stays on its circle. The compiled
 kernels are `mpiparticles.kernels.push_boris` and `mpiparticles.kernels.boris_velocity`
 (Pyccel on the CPU, CUDA for CuPy arrays).
+
+With ``relativistic=True`` both push the proper velocity ``u = gamma v`` (see
+`mpiparticles.relativity`) with the relativistic Boris scheme: the electric half kicks change
+``u``, the rotation is by ``q/m B dt / gamma`` (``gamma`` after the first half kick) and the
+positions move with ``u / gamma``. It keeps ``|u|``, and so the energy, exactly in a pure
+magnetic field and gyrates at the relativistic cyclotron frequency ``omega_c / gamma``; for
+``|u| << c`` it is the Boris step. The kernels are
+`mpiparticles.kernels.push_relativistic_boris` and
+`mpiparticles.kernels.relativistic_boris_velocity`.
 """
 
 from __future__ import annotations
@@ -30,6 +39,13 @@ from mpiparticles._profiling import PROFILE_TAGS
 from mpiparticles._types import Array
 from mpiparticles.kernels.boris_velocity import kernel as boris_velocity_kernel
 from mpiparticles.kernels.push_boris import kernel as push_boris
+from mpiparticles.kernels.push_relativistic_boris import (
+    kernel as push_relativistic_boris,
+)
+from mpiparticles.kernels.relativistic_boris_velocity import (
+    kernel as relativistic_boris_velocity_kernel,
+)
+from mpiparticles.relativity import SPEED_OF_LIGHT, lorentz_factor
 from mpiparticles.store import ParticleStore
 
 
@@ -94,6 +110,9 @@ def boris_velocity(
     b_field: Array | np.ndarray,
     dt: float | Array | np.ndarray,
     charge_over_mass: float | Array | np.ndarray,
+    *,
+    relativistic: bool = False,
+    speed_of_light: float = SPEED_OF_LIGHT,
 ) -> None:
     """Advance velocities by one Boris step in place, without moving any positions.
 
@@ -103,7 +122,8 @@ def boris_velocity(
     Parameters
     ----------
     velocities : array
-        The velocities, a float64 ``(3, N)`` array (NumPy or CuPy); changed in place.
+        The velocities, a float64 ``(3, N)`` array (NumPy or CuPy); changed in place. The
+        proper velocities ``u = gamma v`` with ``relativistic``.
     e_field : array
         The electric field at the markers at the middle of the step, ``(3, N)``, or
         ``(3,)`` for the same field at every marker [V/m].
@@ -113,6 +133,10 @@ def boris_velocity(
         The time step [s], one for all markers or ``(N,)``.
     charge_over_mass : float or array
         The charge over the mass [C/kg], one for all markers or ``(N,)``.
+    relativistic : bool
+        Whether to take the relativistic Boris step, on proper velocities.
+    speed_of_light : float
+        The speed of light with ``relativistic`` [m/s]; ``1.0`` in normalised units.
 
     Raises
     ------
@@ -143,12 +167,17 @@ def boris_velocity(
         length,
         velocities,
     )
-    if _row_major(velocities):
-        boris_velocity_kernel(velocities, e, b, qm, step)
-        return
-    work = xp.get_array_module(velocities).array(velocities, order="C", copy=True)
-    boris_velocity_kernel(work, e, b, qm, step)
-    velocities[...] = work
+    target = velocities
+    if not _row_major(velocities):
+        target = xp.get_array_module(velocities).array(velocities, order="C", copy=True)
+    if relativistic:
+        relativistic_boris_velocity_kernel(
+            target, e, b, qm, step, float(speed_of_light)
+        )
+    else:
+        boris_velocity_kernel(target, e, b, qm, step)
+    if target is not velocities:
+        velocities[...] = target
 
 
 @sp.profile("mpiparticles.boris_push", tags=PROFILE_TAGS)
@@ -158,8 +187,15 @@ def boris_push(
     b_field: Array | np.ndarray,
     dt: float | Array | np.ndarray,
     charge_over_mass: float | Array | np.ndarray,
+    *,
+    relativistic: bool = False,
+    speed_of_light: float = SPEED_OF_LIGHT,
 ) -> None:
     """Advance every stored marker by one Boris step, in place.
+
+    With ``relativistic`` the store's velocities are the proper velocities ``u = gamma v``
+    (`mpiparticles.relativity.proper_velocity` makes them from velocities) and the positions
+    move with ``u / gamma``.
 
     Parameters
     ----------
@@ -175,7 +211,11 @@ def boris_push(
         The time step [s], one for all markers or ``(length,)``, one per stored column.
     charge_over_mass : float or array
         The charge over the mass [C/kg], e.g. ``-e / m_e`` for electrons; one for all
-        markers or ``(length,)``.
+        markers or ``(length,)``. The rest mass with ``relativistic``.
+    relativistic : bool
+        Whether to take the relativistic Boris step, on proper velocities.
+    speed_of_light : float
+        The speed of light with ``relativistic`` [m/s]; ``1.0`` in normalised units.
 
     Raises
     ------
@@ -188,6 +228,8 @@ def boris_push(
     >>> store = ParticleStore(ndim=2, nvel=3)
     >>> _ = store.add(xp.asarray([[0.0], [0.0]]), xp.asarray([[1.0], [0.0], [0.0]]))
     >>> boris_push(store, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], dt=0.1, charge_over_mass=1.0)
+    >>> boris_push(store, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], 0.1, 1.0, relativistic=True,
+    ...            speed_of_light=1.0)
     """
     if store.nvel != 3:
         raise ValueError(
@@ -202,15 +244,18 @@ def boris_push(
     b = _at_markers(b_field, length, "b_field", positions)
     step = _per_marker(dt, length, "dt", positions)
     qm = _per_marker(charge_over_mass, length, "charge_over_mass", positions)
+    c = float(speed_of_light)
     if isinstance(step, float) and isinstance(qm, float):
-        push_boris(positions, velocities, e, b, qm, step)
+        if relativistic:
+            push_relativistic_boris(positions, velocities, e, b, qm, step, c)
+        else:
+            push_boris(positions, velocities, e, b, qm, step)
         return
     # per-marker values: the velocity kernel, then the drift
-    boris_velocity_kernel(
-        velocities,
-        e,
-        b,
-        _full(qm, length, positions),
-        _full(step, length, positions),
-    )
-    positions += step * velocities[: store.ndim]
+    qm, step = _full(qm, length, positions), _full(step, length, positions)
+    if relativistic:
+        relativistic_boris_velocity_kernel(velocities, e, b, qm, step, c)
+        positions += (step / lorentz_factor(velocities, c)) * velocities[: store.ndim]
+    else:
+        boris_velocity_kernel(velocities, e, b, qm, step)
+        positions += step * velocities[: store.ndim]
