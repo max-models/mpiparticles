@@ -5,6 +5,11 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- The `mpiparticles.relativity` helpers return arrays of the kind they are given: a NumPy
+  array stays a NumPy array with the CuPy backend (they used `xp.asarray`, which moved it to
+  the device), so host codes such as beamtracer can use them under CuPy.
+
 ### Added
 - Relativistic Boris push: `boris_push(..., relativistic=True, speed_of_light=...)` and the same
   option of `boris_velocity` push the proper velocity `u = γv` (stored in `store.velocities`)
