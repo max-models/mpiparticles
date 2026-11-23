@@ -37,6 +37,14 @@ __all__ = [
 SPEED_OF_LIGHT = 299792458.0
 
 
+def _as_array(values: Array | np.ndarray) -> Array:
+    """Return ``values`` as an array of its own kind: NumPy stays NumPy, CuPy stays CuPy.
+
+    Not ``xp.asarray``, which would move a NumPy array to the GPU with the CuPy backend.
+    """
+    return xp.get_array_module(values).asarray(values)
+
+
 def lorentz_factor(
     proper_velocities: Array | np.ndarray, speed_of_light: float = SPEED_OF_LIGHT
 ) -> Array:
@@ -54,7 +62,7 @@ def lorentz_factor(
     array
         The Lorentz factors, ``(N,)``.
     """
-    u = xp.asarray(proper_velocities)
+    u = _as_array(proper_velocities)
     module = xp.get_array_module(u)
     return module.sqrt(1.0 + module.sum(u * u, axis=0) / speed_of_light**2)
 
@@ -81,7 +89,7 @@ def proper_velocity(
     ValueError
         If a velocity is not slower than light.
     """
-    v = xp.asarray(velocities)
+    v = _as_array(velocities)
     module = xp.get_array_module(v)
     beta2 = module.sum(v * v, axis=0) / speed_of_light**2
     if bool(module.any(beta2 >= 1.0)):
@@ -106,7 +114,7 @@ def coordinate_velocity(
     array
         The velocities, ``(3, N)``, each slower than ``speed_of_light``.
     """
-    u = xp.asarray(proper_velocities)
+    u = _as_array(proper_velocities)
     return u / lorentz_factor(u, speed_of_light)
 
 
@@ -134,6 +142,6 @@ def kinetic_energy(
     array
         The kinetic energies, ``(N,)`` [J].
     """
-    u = xp.asarray(proper_velocities)
+    u = _as_array(proper_velocities)
     module = xp.get_array_module(u)
     return mass * module.sum(u * u, axis=0) / (lorentz_factor(u, speed_of_light) + 1.0)

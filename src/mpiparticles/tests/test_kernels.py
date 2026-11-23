@@ -462,3 +462,33 @@ def test_the_metal_relativistic_header_is_the_pyccel_block():
             u.astype(float), k.astype(float), b.astype(float), float(inv_c2[0])
         ),
     )
+
+
+@EMULATOR
+def test_the_relativity_helpers_keep_the_array_kind():
+    # with the CuPy backend a NumPy array stays a NumPy array (codes that trace on the host),
+    # and a CuPy array stays on the device
+    code = textwrap.dedent(
+        """
+        import numpy as np
+        from cunumpy.kernel_testing import fake_cupy_session
+
+        import cupy  # the fake CuPy, installed by importing cunumpy
+        from mpiparticles import (
+            coordinate_velocity, kinetic_energy, lorentz_factor, proper_velocity,
+        )
+
+        v = np.array([[0.6, 0.0], [0.0, 0.8], [0.0, 0.0]])
+        with fake_cupy_session():
+            for values, kind in ((v, np.ndarray), (cupy.array(v), cupy.ndarray)):
+                u = proper_velocity(values, 1.0)
+                for result in (
+                    u, coordinate_velocity(u, 1.0), lorentz_factor(u, 1.0),
+                    kinetic_energy(u, 2.0, 1.0),
+                ):
+                    assert type(result) is kind, (type(result), kind)
+            np.testing.assert_allclose(lorentz_factor(proper_velocity(v, 1.0), 1.0),
+                                       [1.25, 5 / 3])
+        """
+    )
+    run_in_fake_cupy_subprocess(code, timeout=600)
