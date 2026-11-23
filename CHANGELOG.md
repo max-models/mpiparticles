@@ -6,6 +6,21 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Relativistic Boris push: `boris_push(..., relativistic=True, speed_of_light=...)` and the same
+  option of `boris_velocity` push the proper velocity `u = γv` (stored in `store.velocities`)
+  with the relativistic Boris scheme: the electric half kicks change `u`, the rotation is by
+  `q/m B dt / γ` with `γ` after the first half kick, and the positions move with `u / γ`. It
+  keeps `|u|` exactly in a magnetic field, gyrates at `ω_c / γ`, keeps every marker slower than
+  light and is the Boris step for `|u| ≪ c`. `mpiparticles.relativity` has `SPEED_OF_LIGHT`,
+  `lorentz_factor`, `proper_velocity`, `coordinate_velocity` and `kinetic_energy`. The blocks,
+  for fused pushes of other codes too: `mpiparticles_relativistic_boris` and
+  `mpiparticles_lorentz_factor` in `boris.cuh`, `relativistic_boris_update` and
+  `lorentz_factor` in `mpiparticles.kernels.boris` (NumPy/CuPy, and
+  `RELATIVISTIC_BORIS_METAL_HEADER`) and in `boris_pyccel.py` (`@inline`, no locals); the
+  kernels `push_relativistic_boris` and `relativistic_boris_velocity` (Pyccel, NumPy, CUDA,
+  Metal). Tests of every backend against the Pyccel blocks, gyration, hyperbolic motion
+  (second order), the relativistic E×B drift and the non-relativistic limit; a tutorial,
+  "Relativistic markers".
 - Guiding centres (drift-kinetic markers): `guiding_centre_push` (a `ParticleStore`) and
   `guiding_centre_step` (plain arrays) move the guiding centre and the parallel velocity by a
   kick and a drift (E×B, grad-B and curvature drifts, parallel electric and mirror forces, the

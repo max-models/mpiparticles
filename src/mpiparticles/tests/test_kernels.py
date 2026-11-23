@@ -252,3 +252,213 @@ def test_the_metal_boris_header_is_the_pyccel_block():
     out = np.zeros((3, N), np.float32)
     kernel(v, k, t, out=(out,), n_threads=N)
     _close(out, _pyccel_boris(v.astype(float), k.astype(float), t.astype(float)))
+
+
+# The relativistic Boris kernels and blocks, in units where c ~ |u| so that gamma matters.
+C = 1.3
+
+
+def _relativistic_velocity_case(rng):
+    return _velocity_case(rng) + [C]
+
+
+def _relativistic_push_case(rng, ndim):
+    return _push_case(rng, ndim) + [C]
+
+
+@EMULATOR
+def test_the_cuda_relativistic_velocity_kernel_agrees():
+    args = _relativistic_velocity_case(np.random.default_rng(11))
+    expected = _copies(args)
+    KERNELS["relativistic_boris_velocity"].host_kernel.kernel.python(*expected)
+    result = _copies(args)
+    emulate_cuda_kernel(
+        KERNELS["relativistic_boris_velocity"].cuda_kernel, *result, n_threads=N
+    )
+    np.testing.assert_allclose(result[0], expected[0], rtol=1e-13, atol=1e-13)
+
+
+@EMULATOR
+@pytest.mark.parametrize("ndim", [1, 2, 3])
+def test_the_cuda_relativistic_push_kernel_agrees(ndim):
+    args = _relativistic_push_case(np.random.default_rng(12 + ndim), ndim)
+    expected = _copies(args)
+    KERNELS["push_relativistic_boris"].host_kernel.kernel.python(*expected)
+    result = _copies(args)
+    emulate_cuda_kernel(
+        KERNELS["push_relativistic_boris"].cuda_kernel, *result, n_threads=N
+    )
+    for i in (0, 1):
+        np.testing.assert_allclose(result[i], expected[i], rtol=1e-13, atol=1e-13)
+
+
+@EMULATOR
+def test_the_relativistic_push_runs_on_cupy_arrays():
+    code = textwrap.dedent(
+        """
+        import numpy as np
+        from cunumpy.kernel_testing import fake_cupy_session
+
+        import cupy  # the fake CuPy, installed by importing cunumpy
+        from mpiparticles import ParticleStore, boris_push, boris_velocity
+        from mpiparticles.kernels.relativistic_boris_velocity.relativistic_boris_velocity_numpy import (
+            relativistic_boris_velocity as reference,
+        )
+
+        rng = np.random.default_rng(13)
+        n, c = 40, 1.3
+        u0, e, b = (rng.normal(size=(3, n)) for _ in range(3))
+        qm, dt = rng.normal(size=n), rng.uniform(0.05, 0.5, n)
+        with fake_cupy_session():
+            expected = u0.copy()
+            reference(expected, e, b, qm, dt, c)
+            u = cupy.array(u0, copy=True)
+            boris_velocity(u, cupy.array(e), cupy.array(b), cupy.array(dt), cupy.array(qm),
+                           relativistic=True, speed_of_light=c)
+            assert isinstance(u, cupy.ndarray)
+            np.testing.assert_allclose(cupy.asnumpy(u), expected, rtol=0, atol=1e-13)
+
+            for step, ratio in ((0.1, 2.0), (cupy.array(dt), cupy.array(qm))):
+                store = ParticleStore(ndim=2, nvel=3)
+                x0 = rng.normal(size=(2, n))
+                store.add(cupy.array(x0, copy=True), cupy.array(u0, copy=True))
+                boris_push(store, cupy.array(e), cupy.array(b), step, ratio,
+                           relativistic=True, speed_of_light=c)
+                velocity = u0.copy()
+                h = np.broadcast_to(cupy.asnumpy(cupy.asarray(step)), (n,)).copy()
+                r = np.broadcast_to(cupy.asnumpy(cupy.asarray(ratio)), (n,)).copy()
+                reference(velocity, e, b, r, h, c)
+                gamma = np.sqrt(1 + np.sum(velocity**2, axis=0) / c**2)
+                moved = x0 + h / gamma * velocity[:2]
+                got_x = cupy.asnumpy(store.positions[:, :n])
+                got_u = cupy.asnumpy(store.velocities[:, :n])
+                np.testing.assert_allclose(got_u, velocity, rtol=0, atol=1e-13)
+                np.testing.assert_allclose(got_x, moved, rtol=0, atol=1e-13)
+        """
+    )
+    run_in_fake_cupy_subprocess(code, timeout=600)
+
+
+@METAL
+def test_the_metal_relativistic_velocity_kernel_agrees():
+    args = _relativistic_velocity_case(np.random.default_rng(14))
+    expected, result = _copies(args), _copies(args)
+    KERNELS["relativistic_boris_velocity"](*expected)
+    metal_kernel("relativistic_boris_velocity")(*result)
+    _close(result[0], expected[0])
+
+
+@METAL
+@pytest.mark.parametrize("ndim", [1, 2, 3])
+def test_the_metal_relativistic_push_kernel_agrees(ndim):
+    args = _relativistic_push_case(np.random.default_rng(15 + ndim), ndim)
+    expected, result = _copies(args), _copies(args)
+    KERNELS["push_relativistic_boris"](*expected)
+    metal_kernel("push_relativistic_boris")(*result)
+    _close(result[1], expected[1])
+    np.testing.assert_allclose(result[0], expected[0], rtol=0.0, atol=1e-5)
+
+
+def _pyccel_relativistic_boris(u, kick, b, inv_c2):
+    """The Pyccel block ``relativistic_boris_update``, run in Python per marker."""
+    from mpiparticles.kernels.boris_pyccel import relativistic_boris_update
+
+    columns = [
+        relativistic_boris_update(*u[:, i], *kick[:, i], *b[:, i], inv_c2)
+        for i in range(u.shape[1])
+    ]
+    return np.array(columns, dtype=u.dtype).T
+
+
+def test_the_numpy_relativistic_blocks_are_the_pyccel_blocks():
+    from mpiparticles.kernels.boris import lorentz_factor, relativistic_boris_update
+    from mpiparticles.kernels.boris_pyccel import lorentz_factor as pyccel_gamma
+
+    rng = np.random.default_rng(16)
+    u, k, b = (rng.normal(size=(3, N)) for _ in range(3))
+    inv_c2 = 1 / C**2
+    np.testing.assert_allclose(
+        relativistic_boris_update(u, k, b, inv_c2),
+        _pyccel_relativistic_boris(u, k, b, inv_c2),
+        rtol=1e-14,
+        atol=1e-14,
+    )
+    np.testing.assert_allclose(
+        lorentz_factor(u, inv_c2),
+        [pyccel_gamma(*u[:, i], inv_c2) for i in range(N)],
+        rtol=1e-15,
+    )
+
+
+@EMULATOR
+def test_the_relativistic_cuda_block_is_the_pyccel_block():
+    import cunumpy as xp
+
+    source = """
+#include "cunumpy/array_view.cuh"
+#include "mpiparticles/kernels/boris.cuh"
+extern "C" __global__ void run(Array2D<double> u, Array2D<double> k, Array2D<double> b,
+                               double inv_c2, Array2D<double> out) {
+    const long long i = blockDim.x * (long long)blockIdx.x + threadIdx.x;
+    if (i >= u.shape[1]) return;
+    double x = u(0, i), y = u(1, i), z = u(2, i);
+    mpiparticles_relativistic_boris(x, y, z, k(0, i), k(1, i), k(2, i), b(0, i), b(1, i),
+                                    b(2, i), inv_c2);
+    out(0, i) = x;
+    out(1, i) = y;
+    out(2, i) = z;
+}"""
+    rng = np.random.default_rng(17)
+    u, k, b = (rng.normal(size=(3, N)) for _ in range(3))
+    roots = [str(p) for p in xp.kernels.source_roots("mpiparticles", "cunumpy")]
+    out = np.zeros((3, N))
+    emulate_cuda_kernel(
+        xp.kernels.CudaKernel(source, "run", include_dirs=roots),
+        u,
+        k,
+        b,
+        1 / C**2,
+        out,
+        n_threads=N,
+    )
+    np.testing.assert_allclose(
+        out, _pyccel_relativistic_boris(u, k, b, 1 / C**2), rtol=1e-14, atol=1e-14
+    )
+
+
+@METAL
+def test_the_metal_relativistic_header_is_the_pyccel_block():
+    import cunumpy as xp
+
+    from mpiparticles.kernels.boris import RELATIVISTIC_BORIS_METAL_HEADER
+
+    source = """
+    uint i = thread_position_in_grid.x;
+    uint n = u_shape[1];
+    if (i >= n) return;
+    float3 r = mpiparticles_relativistic_boris(float3(u[i], u[n + i], u[2 * n + i]),
+                                               float3(k[i], k[n + i], k[2 * n + i]),
+                                               float3(b[i], b[n + i], b[2 * n + i]),
+                                               inv_c2[0]);
+    out[i] = r.x;
+    out[n + i] = r.y;
+    out[2 * n + i] = r.z;
+"""
+    kernel = xp.kernels.MetalKernel(
+        source,
+        ["u", "k", "b", "inv_c2"],
+        ["out"],
+        name="relativistic_boris_header",
+        header=RELATIVISTIC_BORIS_METAL_HEADER,
+    )
+    rng = np.random.default_rng(18)
+    u, k, b = (rng.normal(size=(3, N)).astype(np.float32) for _ in range(3))
+    inv_c2 = np.array([1 / C**2], np.float32)
+    out = np.zeros((3, N), np.float32)
+    kernel(u, k, b, inv_c2, out=(out,), n_threads=N)
+    _close(
+        out,
+        _pyccel_relativistic_boris(
+            u.astype(float), k.astype(float), b.astype(float), float(inv_c2[0])
+        ),
+    )
