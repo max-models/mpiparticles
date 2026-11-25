@@ -6,7 +6,9 @@ arrays (CPU or GPU through ``cunumpy``) with stable int64 ids; a
 moves the markers that left a rank's subdomain to their owners; :func:`boris_push`
 advances them through given electric and magnetic fields (1D3V, 2D3V and 3D3V), and
 :func:`guiding_centre_push` moves them as guiding centres; with ``relativistic=True`` the
-Boris push advances proper velocities (`mpiparticles.relativity`). Without an MPI
+Boris push advances proper velocities (`mpiparticles.relativity`). `mpiparticles.sampling`
+draws markers (Maxwellian and flux speeds, quiet starts, :class:`ImportanceSampling`) and
+`mpiparticles.injection` has the timestep sources that emit them each step. Without an MPI
 launcher everything runs serially, with no MPI calls.
 
 The expensive operations are scope-profiler regions named ``mpiparticles.<operation>``,
@@ -38,6 +40,7 @@ from mpiparticles.guiding_centre import (
     magnetic_moment,
 )
 from mpiparticles.ids import IdAllocator
+from mpiparticles.injection import MarkerSpecies
 from mpiparticles.moments import (
     BinAxis,
     bin_axes,
@@ -55,6 +58,7 @@ from mpiparticles.relativity import (
     lorentz_factor,
     proper_velocity,
 )
+from mpiparticles.sampling import ImportanceSampling, PositionBias, quiet_start
 from mpiparticles.store import MarkerView, ParticleStore, StoreSnapshot
 
 # The profiling regions are off unless the application enables the tag.
@@ -70,8 +74,11 @@ __all__ = [
     "BoxDecomposition",
     "Decomposition",
     "IdAllocator",
+    "ImportanceSampling",
+    "MarkerSpecies",
     "MarkerView",
     "ParticleStore",
+    "PositionBias",
     "SPEED_OF_LIGHT",
     "StoreSnapshot",
     "bin_axes",
@@ -92,5 +99,6 @@ __all__ = [
     "moment_values",
     "phase_space_density",
     "proper_velocity",
+    "quiet_start",
     "velocity_moments",
 ]

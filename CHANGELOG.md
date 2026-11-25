@@ -5,6 +5,21 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Marker loading and injection, moved here from picnic. `mpiparticles.sampling`: Maxwellian
+  velocities (`maxwellian_velocities`), the flux-weighted speeds of a plane source
+  (`flux_speeds`), `quiet_start` (a Hammersley set) and `radical_inverse`, and importance
+  sampling (`ImportanceSampling`, `PositionBias`): markers drawn from a sampling distribution
+  with weight factors `f / s`. Every draw takes a NumPy or CuPy generator (`make_generator`,
+  `as_generator`). `mpiparticles.injection`: the timestep sources `PlanarFluxInjector1D` and
+  `PlanarFluxInjector2D` (with `planar_flux_injector`), `UniformVolumeSource` and
+  `ProfiledVolumeSource` (`cosine_profile`), `ChargeBalanceSource`, `ReemissionSource`,
+  `SurfaceSource` and `SurfaceConversionSource` (`object_surface_segments`) and
+  `DirectedSource` (`orthonormal_frame`). A source's `emit(dt, species)` returns one step's
+  positions, velocities and weights for a `MarkerSpecies`, and `inject(store, dt, species)`
+  adds them to a `ParticleStore`. New dependencies: scipy, simgeometry and methodcard (the
+  method cards of the sources). Tutorial "Loading markers".
+
 ### Changed
 - `ParticleStore.sort_by_key(keys, num_keys=...)`: with the number of keys (cell indices), a
   counting sort (the new host kernel `counting_sort`, Pyccel and NumPy), O(markers + keys), that
