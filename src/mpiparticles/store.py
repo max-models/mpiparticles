@@ -487,7 +487,7 @@ class ParticleStore:
             else:
                 starts, order = self._counting_sort(keys, int(num_keys))
                 count = int(starts[-1])
-            if count:
+            if order is not None and count:
                 self._gather(order[:count])
             self._keep_first(count)
         return starts
