@@ -42,6 +42,16 @@ decides when views may move. `remove(index)` removes one column and `clear()` em
 all fields by it with a stable sort and drops the dead markers. Ids move as int64 and are never
 viewed as floats.
 
+When the keys are cell indices, pass their number: `starts = store.sort_by_key(keys, num_keys=...)`
+sorts with a counting sort, O(markers + keys), about twice as fast as the general radix
+argsort on the host, and returns where each key starts (the markers with key `k` are the columns
+`starts[k]:starts[k + 1]`). An alive key outside `0 .. num_keys - 1` raises `ValueError`; the keys
+of dead markers are ignored.
+
+The fields are gathered into a second set of storage arrays, which then becomes the storage, so
+views taken before a sort are stale afterwards (as after `reserve`). The second set is kept for the
+next sort: a sorted store holds its fields twice.
+
 ## Alive markers
 
 `active_positions()`, `active_velocities()`, `active_weights()` and `active_ids()` return copies of

@@ -6,11 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import cunumpy as xp
+import numpy as np
 import scope_profiler as sp
 
 from mpiparticles._profiling import PROFILE_TAGS
 from mpiparticles._types import Array
 from mpiparticles.ids import IdAllocator
+from mpiparticles.kernels.counting_sort import kernel as COUNTING_SORT
 
 
 def _columns(array: Array, mask: Array) -> Array:
@@ -88,6 +90,10 @@ class ParticleStore:
         self._weights = xp.ones(capacity, dtype=self._dtype)
         self._alive = xp.zeros(capacity, dtype=bool)
         self._ids = xp.zeros(capacity, dtype=xp.int64)
+        # the storage the next sort gathers into (see `sort_by_key`), and how many of
+        # its leading columns hold stale data
+        self._spare: tuple[Array, Array, Array, Array] | None = None
+        self._spare_used = 0
 
     def __init__(
         self,
@@ -362,43 +368,129 @@ class ParticleStore:
         self.compact()
         return True
 
-    def sort_by_key(self, keys: Array) -> None:
+    def _argsort_alive(self, keys: Array) -> tuple[int, Array | None]:
+        """Return the number of alive markers and their stable order by ``keys``."""
+        end = self._length
+        alive = self._alive[:end]
+        count = int(xp.count_nonzero(alive))
+        if count == 0:
+            return 0, None
+        if count < end:
+            top = keys[alive].max()
+            if keys.dtype.kind in "iu" and top < xp.iinfo(keys.dtype).max:
+                # the dead sort last, behind a key above every alive one
+                keys = xp.where(alive, keys, top + 1)
+            else:
+                keys = keys[alive]
+                self.compact()
+        return count, xp.algorithms.sort_by_key(keys)[1]
+
+    def _counting_sort(self, keys: Array, num_keys: int) -> tuple[Array, Array]:
+        """Return the start of each key and the stable order, dead markers last."""
+        end = self._length
+        alive = self._alive[:end]
+        if keys.dtype.kind not in "iu":
+            raise ValueError(f"keys must be integers with num_keys, got {keys.dtype}")
+        if xp.get_array_backend(keys) == "numpy":
+            starts = xp.empty(num_keys + 2, dtype=xp.int64)
+            order = xp.empty(end, dtype=xp.int64)
+            COUNTING_SORT(keys.astype(xp.int64, copy=False), alive, starts, order)
+            if starts[0] < 0:
+                raise ValueError(f"an alive key is outside 0 .. {num_keys - 1}")
+            return starts[: num_keys + 1], order
+        # CuPy: a radix sort of the keys, the dead in an extra key behind the others
+        alive_keys = keys[alive]
+        if alive_keys.size and (
+            int(alive_keys.min()) < 0 or int(alive_keys.max()) >= num_keys
+        ):
+            raise ValueError(f"an alive key is outside 0 .. {num_keys - 1}")
+        binned = xp.where(alive, keys, num_keys)
+        sorted_keys, order = xp.algorithms.sort_by_key(binned)
+        starts = xp.searchsorted(sorted_keys, xp.arange(num_keys + 1), side="left")
+        return xp.to_numpy(starts).astype(xp.int64), order
+
+    def _gather(self, order: Array) -> None:
+        """Make the columns ``order`` the first ``len(order)`` columns of the storage."""
+        count = int(order.shape[0])
+        fields = (self._positions, self._velocities, self._weights, self._ids)
+        spare = self._spare
+        if spare is None:
+            spare = (
+                xp.zeros_like(self._positions),
+                xp.zeros_like(self._velocities),
+                xp.ones_like(self._weights),
+                xp.zeros_like(self._ids),
+            )
+        stale = self._spare_used if self._spare is not None else 0
+        host = xp.get_array_backend(order) == "numpy"
+        for source, target in zip(fields, spare, strict=True):
+            rows = (
+                zip(source, target, strict=True)
+                if source.ndim == 2
+                else [(source, target)]
+            )
+            for row, out in rows:
+                if host:
+                    # mode="clip" skips the bounds check and buffered copy of "raise"
+                    np.take(row, order, out=out[:count], mode="clip")
+                else:
+                    xp.take(row, order, out=out[:count])
+        self._spare = fields
+        self._spare_used = self._length
+        self._positions, self._velocities, self._weights, self._ids = spare
+        # columns the new storage held when it was the storage before, beyond
+        # ``length`` (`_keep_first` clears those below)
+        if stale > self._length:
+            self._clear_rows(self._length, stale)
+
+    def sort_by_key(self, keys: Array, num_keys: int | None = None) -> Array | None:
         """Reorder all fields by ``keys`` (stable) and drop the dead markers.
+
+        The fields are gathered into a second set of storage arrays, which then
+        becomes the storage: views of ``positions`` and the other fields taken
+        before the sort are stale afterwards, as after :meth:`reserve`. The second
+        set is kept for the next sort, so a store that is sorted holds its fields
+        twice (the peak is the same as when every sort allocated them).
 
         Parameters
         ----------
         keys : array of int, shape (length,)
             One key per stored column, for example the cell index. Keys of dead
             markers are ignored. Ids move as int64, never as floats.
+        num_keys : int, optional
+            The number of keys, when every alive key is an integer in
+            ``0 .. num_keys - 1`` (a cell index). On the host this sorts with a
+            counting sort, O(length + num_keys) and several times faster than the
+            radix argsort used otherwise, and returns where each key starts.
+
+        Returns
+        -------
+        array of int64, shape (num_keys + 1,), or None
+            With ``num_keys``: the markers with key ``k`` are the columns
+            ``starts[k]:starts[k + 1]``, and ``starts[num_keys]`` is the new
+            ``length``. None without ``num_keys``.
+
+        Raises
+        ------
+        ValueError
+            If ``keys`` does not have one entry per column, or an alive key is
+            outside ``0 .. num_keys - 1``.
         """
         end = self._length
         keys = xp.asarray(keys)
         if keys.shape != (end,):
             raise ValueError(f"keys must have shape ({end},), got {keys.shape}")
         with sp.region("mpiparticles.sort_by_key", tags=PROFILE_TAGS):
-            alive = self._alive[:end]
-            count = int(xp.count_nonzero(alive))
-            if 0 < count < end:
-                top = keys[alive].max()
-                if keys.dtype.kind in "iu" and top < xp.iinfo(keys.dtype).max:
-                    # the dead sort last, behind a key above every alive one
-                    keys = xp.where(alive, keys, top + 1)
-                else:
-                    keys = keys[alive]
-                    self.compact()
-                    end = count
-            if count:
-                fields = (
-                    self._positions[:, :end],
-                    self._velocities[:, :end],
-                    self._weights[:end],
-                    self._ids[:end],
-                )
-                # component-major: cunumpy gathers the (ncomp, n) arrays row by row
-                _, _, *sorted_fields = xp.algorithms.sort_by_key(keys, *fields, axis=-1)
-                for field, values in zip(fields, sorted_fields, strict=True):
-                    field[..., :count] = values[..., :count]
+            if num_keys is None:
+                starts = None
+                count, order = self._argsort_alive(keys)
+            else:
+                starts, order = self._counting_sort(keys, int(num_keys))
+                count = int(starts[-1])
+            if order is not None and count:
+                self._gather(order[:count])
             self._keep_first(count)
+        return starts
 
     # -- alive markers --------------------------------------------------------
 

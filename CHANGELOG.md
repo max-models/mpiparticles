@@ -5,6 +5,14 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- `ParticleStore.sort_by_key(keys, num_keys=...)`: with the number of keys (cell indices), a
+  counting sort (the new host kernel `counting_sort`, Pyccel and NumPy), O(markers + keys), that
+  returns where each key starts. The sort gathers into a second set of storage arrays, kept
+  between sorts, and swaps it in, instead of allocating new arrays and copying them back.
+  A sort of 0.4M markers by 32^3 cells: 11.7 to 8.2 ms on one core, the counting sort itself
+  2 ms against 4.4 ms for the radix argsort.
+
 ### Fixed
 - The `mpiparticles.relativity` helpers return arrays of the kind they are given: a NumPy
   array stays a NumPy array with the CuPy backend (they used `xp.asarray`, which moved it to
