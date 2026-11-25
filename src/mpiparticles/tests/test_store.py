@@ -1,3 +1,5 @@
+import textwrap
+
 import cunumpy as xp
 import numpy as np
 import pytest
@@ -181,6 +183,79 @@ def test_sort_by_key_matches_a_stable_sort_of_the_alive(dtype, dead_key, dead_fr
     assert np.array_equal(host(store.ids[:count]), expected[3])
 
 
+@pytest.mark.parametrize("dead_fraction", [0.0, 0.3, 1.0])
+def test_counting_sort_matches_a_stable_sort_of_the_alive(dead_fraction):
+    rng = np.random.default_rng(2)
+    n, num_keys = 50, 7
+    store = filled_store(n, capacity=64)
+    dead = rng.random(n) < dead_fraction
+    store.deactivate(xp.asarray(dead))
+    keys = rng.integers(0, num_keys, n)
+    keys[dead] = rng.integers(-5, 50, int(dead.sum()))  # ignored
+    expected = _reference_sort(store, keys)
+    count = expected[2].size
+    starts = store.sort_by_key(xp.asarray(keys), num_keys=num_keys)
+    assert (store.length, store.num_alive) == (count, count)
+    assert np.array_equal(host(store.positions[:, :count]), expected[0])
+    assert np.array_equal(host(store.velocities[:, :count]), expected[1])
+    assert np.array_equal(host(store.weights[:count]), expected[2])
+    assert np.array_equal(host(store.ids[:count]), expected[3])
+    counts = np.bincount(keys[~dead], minlength=num_keys)
+    assert host(starts).tolist() == [0, *np.cumsum(counts).tolist()]
+
+
+@pytest.mark.parametrize("key", [-1, 7])
+def test_counting_sort_refuses_alive_keys_out_of_range(key):
+    store = filled_store(4)
+    with pytest.raises(ValueError, match="outside 0 .. 6"):
+        store.sort_by_key(xp.asarray([0, key, 2, 3]), num_keys=7)
+    with pytest.raises(ValueError, match="integers"):
+        store.sort_by_key(xp.zeros(4), num_keys=7)
+
+
+def test_repeated_sorts_swap_the_storage_and_keep_the_free_columns_empty():
+    rng = np.random.default_rng(3)
+    store = filled_store(40, capacity=64)
+    for size in (30, 10, 25):
+        store.deactivate(xp.asarray(rng.random(store.length) < 0.2))
+        positions = store.positions
+        keys = rng.integers(0, 5, store.length)
+        expected = _reference_sort(store, keys)
+        store.sort_by_key(xp.asarray(keys), num_keys=5)
+        assert store.positions is not positions  # gathered into the second set
+        count = store.length
+        assert np.array_equal(host(store.ids[:count]), expected[3])
+        # the columns beyond length are in the empty state
+        assert not host(store.positions[:, count:]).any()
+        assert not host(store.velocities[:, count:]).any()
+        assert (host(store.weights[count:]) == 1.0).all()
+        assert not host(store.ids[count:]).any()
+        assert not host(store.alive[count:]).any()
+        store.clear()
+        store.add(rng.random((2, size)), rng.random((3, size)))
+
+
+def test_the_counting_sort_kernel_versions_agree():
+    from mpiparticles.kernels.counting_sort import counting_sort_numpy
+    from mpiparticles.kernels.counting_sort import kernel as counting_sort
+
+    rng = np.random.default_rng(4)
+    keys = rng.integers(0, 9, 200)
+    alive = rng.random(200) > 0.25
+    results = []
+    for version in (counting_sort, counting_sort_numpy.counting_sort):
+        starts, order = np.empty(11, np.int64), np.empty(200, np.int64)
+        version(keys, alive, starts, order)
+        results.append((starts, order))
+    assert np.array_equal(results[0][0], results[1][0])
+    assert np.array_equal(results[0][1], results[1][1])
+    keys[np.flatnonzero(alive)[0]] = 9
+    for version in (counting_sort, counting_sort_numpy.counting_sort):
+        starts = np.empty(11, np.int64)
+        version(keys, alive, starts, np.empty(200, np.int64))
+        assert starts[0] == -1
+
+
 def test_sort_keeps_ids_exact_above_2_53():
     store = ParticleStore(1, 1)
     big = 2**62 + np.arange(4, dtype=np.int64) * 3 + 1
@@ -299,3 +374,50 @@ def test_replacing_the_id_allocator_never_reuses_a_stored_id():
 
     assert set(new.tolist()).isdisjoint({0, 1, 2})
     assert all(int(i) % 4 == 1 for i in new)
+
+
+def test_both_sorts_run_on_cupy_arrays():
+    from cunumpy.kernel_testing import run_in_fake_cupy_subprocess
+
+    code = textwrap.dedent(
+        """
+        import numpy as np
+        from cunumpy.kernel_testing import fake_cupy_session
+
+        import cupy  # the fake CuPy, installed by importing cunumpy
+        from mpiparticles import ParticleStore
+
+        rng = np.random.default_rng(5)
+        n = 30
+        x, v = rng.random((2, n)), rng.random((3, n))
+        keys = rng.integers(0, 4, n)
+        dead = rng.random(n) < 0.3
+        alive = ~dead
+        order = np.flatnonzero(alive)[np.argsort(keys[alive], kind="stable")]
+        with fake_cupy_session():
+            for num_keys in (None, 4):
+                store = ParticleStore(2, 3, capacity=40)
+                store.add(cupy.array(x), cupy.array(v))
+                store.deactivate(cupy.array(dead))
+                starts = store.sort_by_key(cupy.array(keys), num_keys=num_keys)
+                assert isinstance(store.positions, cupy.ndarray)
+                count = store.length
+                assert count == alive.sum()
+                np.testing.assert_array_equal(
+                    cupy.asnumpy(store.positions[:, :count]), x[:, order]
+                )
+                np.testing.assert_array_equal(
+                    cupy.asnumpy(store.velocities[:, :count]), v[:, order]
+                )
+                if num_keys is not None:
+                    counts = np.bincount(keys[alive], minlength=4)
+                    assert list(starts) == [0, *np.cumsum(counts)]
+            try:
+                store.sort_by_key(cupy.array(np.full(store.length, 9)), num_keys=4)
+            except ValueError as error:
+                assert "outside" in str(error)
+            else:
+                raise AssertionError("an alive key out of range was accepted")
+        """
+    )
+    run_in_fake_cupy_subprocess(code, timeout=600)
