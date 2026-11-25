@@ -79,8 +79,8 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
   sampling (**`ImportanceSampling`**, weights `f / s`), from a NumPy or
   CuPy generator; **`mpiparticles.injection`** has the timestep sources
   (planes, volumes, surfaces, wall-driven emission, nozzles), which give
-  one step's markers as arrays for a **`MarkerSpecies`** or add them to a
-  store.
+  one step’s markers as arrays for a **`MarkerSpecies`** or add them to
+  a store.
 
 Documentation: <https://max-models.github.io/mpiparticles/>
 
