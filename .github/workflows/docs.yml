@@ -32,6 +32,7 @@ jobs:
         getting-started/live-demo/index.html
         tutorials/index.html
         tutorials/moving-markers/index.html
+        tutorials/loading-markers/index.html
         full-examples/index.html
         full-examples/owner-map/index.html
         api/mpiparticles/index.html

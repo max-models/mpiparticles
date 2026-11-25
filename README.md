@@ -74,6 +74,13 @@ mpiexec -n 4 python example.py   # with proc_sizes=[2, 2]; or just: python examp
   force, the magnetic moment kept; a kick-drift step, no gyration to
   resolve), through fields given as a function of the positions;
   **`guiding_centre_step`** is the same on plain arrays.
+- **`mpiparticles.sampling`** draws markers: Maxwellian and
+  flux-weighted speeds, a quiet start (**`quiet_start`**) and importance
+  sampling (**`ImportanceSampling`**, weights `f / s`), from a NumPy or
+  CuPy generator; **`mpiparticles.injection`** has the timestep sources
+  (planes, volumes, surfaces, wall-driven emission, nozzles), which give
+  one step’s markers as arrays for a **`MarkerSpecies`** or add them to
+  a store.
 
 Documentation: <https://max-models.github.io/mpiparticles/>
 
